@@ -9,8 +9,16 @@ metadata {
         capability "Refresh"
 
         command "reverseFan"
+        command "toggleMotionFan"
+        command "toggleMotionLight"
+        command "enableMotionFan"
+        command "enableMotionLight"
+        command "disableMotionFan"
+        command "disableMotionLight"
 
         attribute "fanDirection", "string"
+        attribute "motionFan", "string"
+        attribute "motionLight", "string"
     }
 }
 
@@ -52,9 +60,49 @@ def reverseFan() {
     }
 }
 
+def setMotion(String device, String onOff) {
+    sendCommand(device, "AUTO", "${onOff}")
+}
+
+def toggleMotionFan() {
+    if (device.currentValue("motionFan") == "OFF") {
+        enableMotionFan() 
+    } else {
+        disableMotionFan() 
+    }
+}
+
+def enableMotionFan() {
+    setMotion("FAN", "ON")
+}
+
+def disableMotionFan() {
+    setMotion("FAN", "OFF")
+}
+
+def toggleMotionLight() {
+    if (device.currentValue("motionLight") == "OFF") {
+        enableMotionLight()    
+    } else {
+        disableMotionLight()
+    }
+}
+
+def enableMotionLight() {
+    setMotion("LIGHT", "ON")
+}
+
+def disableMotionLight() {
+    setMotion("LIGHT", "OFF")
+}
+
 def refresh() {
     sendCommand("LIGHT", "LEVEL", "GET;ACTUAL")
     sendCommand("FAN", "DIR", "GET")
+    
+    // Get motion status
+    //sendCommand("SNSROCC", "STATUS", "GET")
+    //sendCommandRaw("<${settings.deviceName};GETALL>")
 }
 
 def parse(String description) {
@@ -78,6 +126,8 @@ def parse(String description) {
                     int level = (int)Math.ceil(values[4].toInteger() * HAIKU_LIGHT_SPREAD)
                     events << createEvent(name: "level", value: level)
                     return events;
+                case "AUTO":
+                    return createEvent(name: "motionLight", value: values[3])
             }
             break
         case "FAN":
@@ -106,6 +156,8 @@ def parse(String description) {
                 case "DIR":
                     refreshFanSpeed()
                     return createEvent(name: "fanDirection", value: values[3])
+                case "AUTO":
+                    return createEvent(name: "motionFan", value: values[3])
             }
             break
     }
@@ -190,12 +242,16 @@ def sendFanSpeedCommand(int level) {
 }
 
 def sendCommand(String haikuSubDevice, String haikuFunction, String command) {
-        def haikuCommand = generateCommand(haikuSubDevice, haikuFunction, command)
-        sendUDPRequest(settings.deviceIp, "31415", haikuCommand)
+    def haikuCommand = generateCommand(settings.deviceName, haikuSubDevice, haikuFunction, command)
+    sendCommandRaw(haikuCommand)
 }
 
-static def generateCommand(haikuSubDevice, haikuFunction, command) {
-    return "<ALL;${haikuSubDevice};${haikuFunction};${command}>"
+def sendCommandRaw(String haikuCommand) {
+    sendUDPRequest(settings.deviceIp, "31415", haikuCommand)
+}
+
+static def generateCommand(deviceName, haikuSubDevice, haikuFunction, command) {
+    return "<${deviceName};${haikuSubDevice};${haikuFunction};${command}>"
 }
 
 def sendUDPRequest(address, port, payload) {
